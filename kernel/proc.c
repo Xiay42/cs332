@@ -96,6 +96,10 @@ proc_init(char* name)
 
     list_init(&p->threads);
 
+    // initialize stdin and stdout to be file descriptor 0 and 1 respectively
+    p->fd[0] = &stdin;
+    p->fd[1] = &stdout;
+
 	// cwd for all processes are root for now
     sb = root_sb;
 	inum = root_sb->s_root_inum;

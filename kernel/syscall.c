@@ -80,6 +80,34 @@ static sysret_t (*syscalls[])(void*) = {
     [SYS_halt] = sys_halt,
 };
 
+static int
+alloc_fd(struct file *f)
+{
+    // get the current thread's process
+    struct proc *p = proc_current();
+    kassert(p);
+
+    // check for the first empty file descriptor
+    int fd_index = 0;
+    struct file *fd_contents = p->fd[0];
+    while (fd_contents != NULL && fd_index < PROC_MAX_FILE)
+    {
+        fd_index++;
+        fd_contents = p->fd[fd_index];
+    }
+
+    // if the fd table is full, return an error
+    if (fd_index = PROC_MAX_FILE)
+    {
+        return ERR_FAULT;
+    }
+    
+    // save the file into the file descriptor table
+    p->fd[fd_index] = f;
+    return fd_index;
+    
+}
+
 static bool
 validate_str(char *s)
 {
@@ -202,7 +230,47 @@ sys_sleep(void* arg)
 static sysret_t
 sys_open(void *arg)
 {
-    panic("syscall open not implemented");
+    // fetch the arguments out of the void *arg
+    sysarg_t pathname_arg, flags_arg, mode_arg;
+
+    kassert(fetch_arg(arg, 1, &pathname_arg)); // if true, do nothing,
+    kassert(fetch_arg(arg, 3, &flags_arg));    // if false, panic!
+    kassert(fetch_arg(arg, 2, &mode_arg));
+
+    // Convert arguments to their proper types
+    char *pathname = (char *)pathname_arg;
+    int flags = (int)flags_arg;
+    fmode_t mode = (fmode_t)mode_arg;
+
+    // Validate the address of the pathname
+    if (!validate_str((char*)pathname)) {
+        return ERR_FAULT;
+    }
+
+    // validate_flag()
+    // dont need this because fs_open_file already does this
+
+    struct file *file;
+    struct proc *p = proc_current();
+    kassert(p);
+    err_t res = fs_open_file(pathname, flags, mode, file);
+
+    if (res != ERR_OK)
+    {
+        return res;
+    }
+
+    // allocate a spot on the fd table for file
+    int fd_index = alloc_fd(file);
+
+
+    // Validate flags // dont need this because fs_open_file already does this
+    // if (((flags & FS_RDONLY) == 0) && ((flags & FS_WRONLY) == 0))
+    // {
+    //     return ERR_INVAL;
+    // }
+
+    return (sysret_t) fd_index;
 }
 
 // int close(int fd);
