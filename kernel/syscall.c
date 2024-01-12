@@ -97,7 +97,7 @@ alloc_fd(struct file *f)
     }
 
     // if the fd table is full, return an error
-    if (fd_index = PROC_MAX_FILE)
+    if (fd_index == PROC_MAX_FILE)
     {
         return ERR_FAULT;
     }
@@ -247,13 +247,11 @@ sys_open(void *arg)
         return ERR_FAULT;
     }
 
-    // validate_flag()
-    // dont need this because fs_open_file already does this
-
+    // open the file 
     struct file *file;
     struct proc *p = proc_current();
     kassert(p);
-    err_t res = fs_open_file(pathname, flags, mode, file);
+    err_t res = fs_open_file(pathname, flags, mode, &file);
 
     if (res != ERR_OK)
     {
@@ -262,13 +260,6 @@ sys_open(void *arg)
 
     // allocate a spot on the fd table for file
     int fd_index = alloc_fd(file);
-
-
-    // Validate flags // dont need this because fs_open_file already does this
-    // if (((flags & FS_RDONLY) == 0) && ((flags & FS_WRONLY) == 0))
-    // {
-    //     return ERR_INVAL;
-    // }
 
     return (sysret_t) fd_index;
 }
