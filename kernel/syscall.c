@@ -92,8 +92,8 @@ alloc_fd(struct file *f)
     struct file *fd_contents = p->fd[0];
     while (fd_contents != NULL && fd_index < PROC_MAX_FILE)
     {
-        fd_index++;
         fd_contents = p->fd[fd_index];
+        fd_index++;
     }
 
     // if the fd table is full, return an error
@@ -105,7 +105,6 @@ alloc_fd(struct file *f)
     // save the file into the file descriptor table
     p->fd[fd_index] = f;
     return fd_index;
-    
 }
 
 static bool
@@ -234,8 +233,8 @@ sys_open(void *arg)
     sysarg_t pathname_arg, flags_arg, mode_arg;
 
     kassert(fetch_arg(arg, 1, &pathname_arg)); // if true, do nothing,
-    kassert(fetch_arg(arg, 3, &flags_arg));    // if false, panic!
-    kassert(fetch_arg(arg, 2, &mode_arg));
+    kassert(fetch_arg(arg, 2, &flags_arg));    // if false, panic!
+    kassert(fetch_arg(arg, 3, &mode_arg));
 
     // Convert arguments to their proper types
     char *pathname = (char *)pathname_arg;
@@ -253,6 +252,7 @@ sys_open(void *arg)
     kassert(p);
     err_t res = fs_open_file(pathname, flags, mode, &file);
 
+    // if fs_open_file() has an error, return it
     if (res != ERR_OK)
     {
         return res;
@@ -260,7 +260,7 @@ sys_open(void *arg)
 
     // allocate a spot on the fd table for file
     int fd_index = alloc_fd(file);
-
+    // return the fd number
     return (sysret_t) fd_index;
 }
 

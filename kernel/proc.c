@@ -100,6 +100,12 @@ proc_init(char* name)
     p->fd[0] = &stdin;
     p->fd[1] = &stdout;
 
+    // initialize the fd table to be NULL
+    for (size_t i = 2; i < PROC_MAX_FILE; i++)
+    {
+        p->fd[i] = NULL;
+    }
+
 	// cwd for all processes are root for now
     sb = root_sb;
 	inum = root_sb->s_root_inum;
