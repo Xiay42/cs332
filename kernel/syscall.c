@@ -108,6 +108,22 @@ alloc_fd(struct file *f)
 }
 
 static bool
+validate_fd(int fd_index)
+{
+    // get the current thread's process
+    struct proc *p = proc_current();
+    kassert(p);
+
+    // make sure fd_index is within the valid range
+    if ((fd_index < 0) || (fd_index > PROC_MAX_FILE - 1)) {
+        return False;
+    }
+    
+    // return if the fd_index is in the open file table for the current process
+    return (p->fd[fd_index] != NULL);
+}
+
+static bool
 validate_str(char *s)
 {
     struct memregion *mr;
@@ -278,17 +294,33 @@ sys_read(void* arg)
     sysarg_t fd, buf, count;
 
     kassert(fetch_arg(arg, 1, &fd));
-    kassert(fetch_arg(arg, 3, &count));
     kassert(fetch_arg(arg, 2, &buf));
+    kassert(fetch_arg(arg, 3, &count));
 
     if (!validate_ptr((void*)buf, (size_t)count)) {
         return ERR_FAULT;
     }
 
+    kprintf("fd: %d\n", fd);
+
+    if (!validate_fd((int)fd)) {
+        return ERR_INVAL;
+    }
+
     if (fd == 0) {
         return console_read((void*)buf, (size_t)count);
     }
-    return ERR_INVAL;
+    
+    // get the current thread's process
+    struct proc *p = proc_current();
+    kassert(p);
+
+    kprintf("read_file\n");
+    ssize_t res = fs_read_file(p->fd[fd], (void*)buf, (size_t)count, (offset_t*)p->fd[fd]->f_pos);
+    
+    kprintf("res: %d", res);
+
+    return (sysret_t)res;
 }
 
 // int write(int fd, const void *buf, size_t count)
