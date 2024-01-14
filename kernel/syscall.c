@@ -353,21 +353,40 @@ sys_read(void* arg)
 static sysret_t
 sys_write(void* arg)
 {
-    sysarg_t fd, count, buf;
+    sysarg_t fd_arg, count_arg, buf_arg;
 
-    kassert(fetch_arg(arg, 1, &fd));
-    kassert(fetch_arg(arg, 3, &count));
-    kassert(fetch_arg(arg, 2, &buf));
-
+    kassert(fetch_arg(arg, 1, &fd_arg));
+    kassert(fetch_arg(arg, 2, &buf_arg));
+    kassert(fetch_arg(arg, 3, &count_arg));
+    
+    // Convert arguments to their proper types
+    int fd = (int)fd_arg;
+    void *buf = (void *)buf_arg;
+    size_t count = (size_t)count_arg;
+    
+    // validate buffer
     if (!validate_ptr((void*)buf, (size_t)count)) {
         return ERR_FAULT;
     }
 
+    // make sure that fd refers to an open file
+    if (!validate_fd((int)fd)) {
+        return ERR_INVAL;
+    }
+
+    // check if it is stdout
     if (fd == 1) {
         // write some stuff for now assuming one string
         return console_write((void*)buf, (size_t) count);
     }
-    return ERR_INVAL;
+
+    // get the current thread's process
+    struct proc *p = proc_current();
+    kassert(p);
+
+    ssize_t res = fs_write_file(p->fd_table[fd], buf, count, &(p->fd_table[fd]->f_pos));
+
+    return (sysret_t)res;
 }
 
 // int link(const char *oldpath, const char *newpath)
