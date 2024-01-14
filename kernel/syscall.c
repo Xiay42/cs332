@@ -88,22 +88,21 @@ alloc_fd(struct file *f)
     kassert(p);
 
     // check for the first empty file descriptor
-    int fd_index = 0;
-    struct file *fd_contents = p->fd_table[0];
-    while (fd_contents != NULL && fd_index < PROC_MAX_FILE)
+    int fd_index = 0;    
+    while (p->fd_table[fd_index] != NULL && fd_index < PROC_MAX_FILE)
     {
-        fd_contents = p->fd_table[fd_index];
         fd_index++;
     }
 
     // if the fd table is full, return an error
     if (fd_index == PROC_MAX_FILE)
     {
-        return ERR_FAULT;
+        return ERR_NOMEM;
     }
     
     // save the file into the file descriptor table
     p->fd_table[fd_index] = f;
+
     return fd_index;
 }
 
@@ -273,9 +272,10 @@ sys_open(void *arg)
     {
         return res;
     }
-
+    
     // allocate a spot on the fd table for file
     int fd_index = alloc_fd(file);
+
     // return the fd number
     return (sysret_t) fd_index;
 }
@@ -284,7 +284,30 @@ sys_open(void *arg)
 static sysret_t
 sys_close(void *arg)
 {
-    panic("syscall close not implemented");
+    sysarg_t fd_arg;
+
+    kassert(fetch_arg(arg, 1, &fd_arg));
+
+    // Convert argument to proper type
+    int fd = (int)fd_arg;
+
+    // make sure that fd refers to an open file
+    if (!validate_fd((int)fd)) {
+        return ERR_INVAL;
+    }
+    
+    // get the current thread's process
+    struct proc *p = proc_current();
+    kassert(p);
+
+    struct file *file = p->fd_table[fd];
+
+    fs_close_file(file);
+
+    // delete the file from the fd_table
+    p->fd_table[fd] = NULL;
+
+    return ERR_OK;
 }
 
 // int read(int fd, void *buf, size_t count);
@@ -302,10 +325,12 @@ sys_read(void* arg)
     void *buf = (void *)buf_arg;
     size_t count = (size_t)count_arg;
 
+    // validate buffer
     if (!validate_ptr((void*)buf, (size_t)count)) {
         return ERR_FAULT;
     }
 
+    // make sure that fd refers to an open file
     if (!validate_fd((int)fd)) {
         return ERR_INVAL;
     }
