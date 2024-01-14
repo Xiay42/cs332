@@ -466,7 +466,32 @@ sys_chdir(void *arg)
 static sysret_t
 sys_readdir(void *arg)
 {
-    panic("syscall readdir not implemented");
+    sysarg_t fd_arg, dirent_arg;
+
+    kassert(fetch_arg(arg, 1, &fd_arg));
+    kassert(fetch_arg(arg, 2, &dirent_arg));
+    
+    // Convert arguments to their proper types
+    int fd = (int)fd_arg;
+    struct dirent *dirent = (struct dirent*)dirent_arg;
+    
+    // validate dirent's name
+    if (!validate_str((void*)dirent->name)) {
+        return ERR_FAULT;
+    }
+
+    // make sure that fd refers to an open file
+    if (!validate_fd((int)fd)) {
+        return ERR_INVAL;
+    }
+
+    // get the current thread's process
+    struct proc *p = proc_current();
+    kassert(p);
+
+    err_t err = fs_readdir(p->fd_table[fd], dirent);
+
+    return (sysret_t)err;
 }
 
 // int rmdir(const char *pathname);
