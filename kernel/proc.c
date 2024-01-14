@@ -97,13 +97,13 @@ proc_init(char* name)
     list_init(&p->threads);
 
     // initialize stdin and stdout to be file descriptor 0 and 1 respectively
-    p->fd[0] = &stdin;
-    p->fd[1] = &stdout;
+    p->fd_table[0] = &stdin;
+    p->fd_table[1] = &stdout;
 
     // initialize the fd table to be NULL
     for (size_t i = 2; i < PROC_MAX_FILE; i++)
     {
-        p->fd[i] = NULL;
+        p->fd_table[i] = NULL;
     }
 
 	// cwd for all processes are root for now

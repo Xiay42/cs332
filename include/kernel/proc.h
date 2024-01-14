@@ -16,18 +16,10 @@ struct proc {
     pid_t pid;
     char name[PROC_NAME_LEN];
     struct addrspace as;
-    struct inode *cwd;                  // current working directory
-    List threads;                       // list of threads belong to the process, right now just 1 per process
-    Node proc_node;                     // used by ptable to keep track each process
-
-    //file descriptor table goes here
-    struct file *fd[PROC_MAX_FILE];
-    // Replace with an array or something
-    // 0: stdin
-    // 1: stdout
-    // 2: starts NULL, just a struct file *
-    // ...
-    // PROC_MAX_FILE - 1: starts NULL, just a struct file *
+    struct inode *cwd;                    // current working directory
+    List threads;                         // list of threads belong to the process, right now just 1 per process
+    Node proc_node;                       // used by ptable to keep track each process
+    struct file *fd_table[PROC_MAX_FILE]; //file descriptor table
 };
 
 struct proc *init_proc;

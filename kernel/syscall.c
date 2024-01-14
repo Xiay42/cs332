@@ -89,10 +89,10 @@ alloc_fd(struct file *f)
 
     // check for the first empty file descriptor
     int fd_index = 0;
-    struct file *fd_contents = p->fd[0];
+    struct file *fd_contents = p->fd_table[0];
     while (fd_contents != NULL && fd_index < PROC_MAX_FILE)
     {
-        fd_contents = p->fd[fd_index];
+        fd_contents = p->fd_table[fd_index];
         fd_index++;
     }
 
@@ -103,7 +103,7 @@ alloc_fd(struct file *f)
     }
     
     // save the file into the file descriptor table
-    p->fd[fd_index] = f;
+    p->fd_table[fd_index] = f;
     return fd_index;
 }
 
@@ -120,7 +120,7 @@ validate_fd(int fd_index)
     }
     
     // return if the fd_index is in the open file table for the current process
-    return (p->fd[fd_index] != NULL);
+    return (p->fd_table[fd_index] != NULL);
 }
 
 static bool
@@ -291,22 +291,26 @@ sys_close(void *arg)
 static sysret_t
 sys_read(void* arg)
 {
-    sysarg_t fd, buf, count;
+    sysarg_t fd_arg, buf_arg, count_arg;
 
-    kassert(fetch_arg(arg, 1, &fd));
-    kassert(fetch_arg(arg, 2, &buf));
-    kassert(fetch_arg(arg, 3, &count));
+    kassert(fetch_arg(arg, 1, &fd_arg));
+    kassert(fetch_arg(arg, 2, &buf_arg));
+    kassert(fetch_arg(arg, 3, &count_arg));
+    
+    // Convert arguments to their proper types
+    int fd = (int)fd_arg;
+    void *buf = (void *)buf_arg;
+    size_t count = (size_t)count_arg;
 
     if (!validate_ptr((void*)buf, (size_t)count)) {
         return ERR_FAULT;
     }
 
-    kprintf("fd: %d\n", fd);
-
     if (!validate_fd((int)fd)) {
         return ERR_INVAL;
     }
 
+    // check if it is stdin
     if (fd == 0) {
         return console_read((void*)buf, (size_t)count);
     }
@@ -315,10 +319,7 @@ sys_read(void* arg)
     struct proc *p = proc_current();
     kassert(p);
 
-    kprintf("read_file\n");
-    ssize_t res = fs_read_file(p->fd[fd], (void*)buf, (size_t)count, (offset_t*)p->fd[fd]->f_pos);
-    
-    kprintf("res: %d", res);
+    ssize_t res = fs_read_file(p->fd_table[fd], buf, count, &(p->fd_table[fd]->f_pos));
 
     return (sysret_t)res;
 }
