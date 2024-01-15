@@ -535,7 +535,32 @@ sys_meminfo(void *arg)
 static sysret_t
 sys_dup(void *arg)
 {
-    panic("syscall dup not implemented");
+    sysarg_t fd_arg;
+
+    kassert(fetch_arg(arg, 1, &fd_arg));
+    
+    // Convert argument to its proper type
+    int fd = (int)fd_arg;
+
+    // make sure that fd refers to an open file
+    if (!validate_fd((int)fd)) {
+        return ERR_INVAL;
+    }
+
+    // get the current thread's process
+    struct proc *p = proc_current();
+    kassert(p);
+
+    struct file *file = p->fd_table[fd];
+
+    // reopen the file
+    fs_reopen_file(file);
+    
+    // allocate a spot on the fd table for file
+    int new_fd = alloc_fd(file);
+
+    // return the fd number
+    return (sysret_t) new_fd;
 }
 
 // int pipe(int* fds);
