@@ -335,14 +335,14 @@ sys_read(void* arg)
         return ERR_INVAL;
     }
 
-    // check if it is stdin
-    if (fd == 0) {
-        return console_read((void*)buf, (size_t)count);
-    }
-    
     // get the current thread's process
     struct proc *p = proc_current();
     kassert(p);
+
+    // check if it is stdin
+    if (&stdin == p->fd_table[fd]) {
+        return console_read((void*)buf, (size_t)count);
+    }
 
     ssize_t res = fs_read_file(p->fd_table[fd], buf, count, &(p->fd_table[fd]->f_pos));
 
@@ -374,15 +374,15 @@ sys_write(void* arg)
         return ERR_INVAL;
     }
 
-    // check if it is stdout
-    if (fd == 1) {
-        // write some stuff for now assuming one string
-        return console_write((void*)buf, (size_t) count);
-    }
-
     // get the current thread's process
     struct proc *p = proc_current();
     kassert(p);
+
+    // check if it is stdout
+    if (&stdout == p->fd_table[fd]) {
+        // write some stuff for now assuming one string
+        return console_write((void*)buf, (size_t)count);
+    }
 
     ssize_t res = fs_write_file(p->fd_table[fd], buf, count, &(p->fd_table[fd]->f_pos));
 
