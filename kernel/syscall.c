@@ -88,38 +88,35 @@ alloc_fd(struct file *f)
     kassert(p);
 
     // check for the first empty file descriptor
-    int fd_index = 0;    
-    while (p->fd_table[fd_index] != NULL && fd_index < PROC_MAX_FILE)
-    {
-        fd_index++;
+    int fd = 0;    
+    while (p->fd_table[fd] != NULL && fd < PROC_MAX_FILE) {
+        fd++;
     }
 
     // if the fd table is full, return an error
-    if (fd_index == PROC_MAX_FILE)
-    {
+    if (fd == PROC_MAX_FILE) {
         return ERR_NOMEM;
     }
     
-    // save the file into the file descriptor table
-    p->fd_table[fd_index] = f;
-
-    return fd_index;
+    // save the file into the file descriptor table and return its index
+    p->fd_table[fd] = f;
+    return fd;
 }
 
 static bool
-validate_fd(int fd_index)
+validate_fd(int fd)
 {
     // get the current thread's process
     struct proc *p = proc_current();
     kassert(p);
 
-    // make sure fd_index is within the valid range
-    if ((fd_index < 0) || (fd_index > PROC_MAX_FILE - 1)) {
+    // make sure fd is within the valid range
+    if ((fd < 0) || (fd > PROC_MAX_FILE - 1)) {
         return False;
     }
     
-    // return if the fd_index is in the open file table for the current process
-    return (p->fd_table[fd_index] != NULL);
+    // return if the fd is in the open file table for the current process
+    return (p->fd_table[fd] != NULL);
 }
 
 static bool
@@ -244,19 +241,18 @@ sys_sleep(void* arg)
 static sysret_t
 sys_open(void *arg)
 {
-    // fetch the arguments out of the void *arg
+    // fetch args
     sysarg_t pathname_arg, flags_arg, mode_arg;
-
-    kassert(fetch_arg(arg, 1, &pathname_arg)); // if true, do nothing,
-    kassert(fetch_arg(arg, 2, &flags_arg));    // if false, panic!
+    kassert(fetch_arg(arg, 1, &pathname_arg));
+    kassert(fetch_arg(arg, 2, &flags_arg));
     kassert(fetch_arg(arg, 3, &mode_arg));
 
-    // Convert arguments to their proper types
+    // convert arguments to their proper types
     char *pathname = (char *)pathname_arg;
     int flags = (int)flags_arg;
     fmode_t mode = (fmode_t)mode_arg;
 
-    // Validate the address of the pathname
+    // validate the address of the pathname
     if (!validate_str((char*)pathname)) {
         return ERR_FAULT;
     }
@@ -268,27 +264,24 @@ sys_open(void *arg)
     err_t res = fs_open_file(pathname, flags, mode, &file);
 
     // if fs_open_file() has an error, return it
-    if (res != ERR_OK)
-    {
+    if (res != ERR_OK) {
         return res;
     }
     
-    // allocate a spot on the fd table for file
-    int fd_index = alloc_fd(file);
-
-    // return the fd number
-    return (sysret_t) fd_index;
+    // add file to the fd_table and return its index
+    int fd = alloc_fd(file);
+    return (sysret_t) fd;
 }
 
 // int close(int fd);
 static sysret_t
 sys_close(void *arg)
 {
+    // fetch arg
     sysarg_t fd_arg;
-
     kassert(fetch_arg(arg, 1, &fd_arg));
 
-    // Convert argument to proper type
+    // convert argument to proper type
     int fd = (int)fd_arg;
 
     // make sure that fd refers to an open file
@@ -296,15 +289,13 @@ sys_close(void *arg)
         return ERR_INVAL;
     }
     
-    // get the current thread's process
+    // get the file stored at index fd
     struct proc *p = proc_current();
     kassert(p);
-
     struct file *file = p->fd_table[fd];
 
+    // close the file and remove it from fd_table
     fs_close_file(file);
-
-    // delete the file from the fd_table
     p->fd_table[fd] = NULL;
 
     return ERR_OK;
@@ -314,13 +305,13 @@ sys_close(void *arg)
 static sysret_t
 sys_read(void* arg)
 {
+    // fetch args
     sysarg_t fd_arg, buf_arg, count_arg;
-
     kassert(fetch_arg(arg, 1, &fd_arg));
     kassert(fetch_arg(arg, 2, &buf_arg));
     kassert(fetch_arg(arg, 3, &count_arg));
     
-    // Convert arguments to their proper types
+    // convert arguments to their proper types
     int fd = (int)fd_arg;
     void *buf = (void *)buf_arg;
     size_t count = (size_t)count_arg;
@@ -339,13 +330,13 @@ sys_read(void* arg)
     struct proc *p = proc_current();
     kassert(p);
 
-    // check if it is stdin
+    // if fd is stdin, read from the console
     if (&stdin == p->fd_table[fd]) {
         return console_read((void*)buf, (size_t)count);
     }
 
+    // run fs_read_file() and return the result
     ssize_t res = fs_read_file(p->fd_table[fd], buf, count, &(p->fd_table[fd]->f_pos));
-
     return (sysret_t)res;
 }
 
@@ -353,8 +344,8 @@ sys_read(void* arg)
 static sysret_t
 sys_write(void* arg)
 {
+    // fetch args
     sysarg_t fd_arg, count_arg, buf_arg;
-
     kassert(fetch_arg(arg, 1, &fd_arg));
     kassert(fetch_arg(arg, 2, &buf_arg));
     kassert(fetch_arg(arg, 3, &count_arg));
@@ -378,14 +369,13 @@ sys_write(void* arg)
     struct proc *p = proc_current();
     kassert(p);
 
-    // check if it is stdout
+    // if fd is stdout, write to the console
     if (&stdout == p->fd_table[fd]) {
-        // write some stuff for now assuming one string
         return console_write((void*)buf, (size_t)count);
     }
 
+    // run fs_write_file() and return the results
     ssize_t res = fs_write_file(p->fd_table[fd], buf, count, &(p->fd_table[fd]->f_pos));
-
     return (sysret_t)res;
 }
 
@@ -466,12 +456,12 @@ sys_chdir(void *arg)
 static sysret_t
 sys_readdir(void *arg)
 {
+    // fetch args
     sysarg_t fd_arg, dirent_arg;
-
     kassert(fetch_arg(arg, 1, &fd_arg));
     kassert(fetch_arg(arg, 2, &dirent_arg));
     
-    // Convert arguments to their proper types
+    // convert arguments to their proper types
     int fd = (int)fd_arg;
     struct dirent *dirent = (struct dirent*)dirent_arg;
     
@@ -489,8 +479,8 @@ sys_readdir(void *arg)
     struct proc *p = proc_current();
     kassert(p);
 
+    // run fs_readdir() and return the result
     err_t err = fs_readdir(p->fd_table[fd], dirent);
-
     return (sysret_t)err;
 }
 
@@ -513,7 +503,41 @@ sys_rmdir(void *arg)
 static sysret_t
 sys_fstat(void *arg)
 {
-    panic("syscall fstat not implemented");
+    // fetch args
+    sysarg_t fd_arg, stat_arg;
+    kassert(fetch_arg(arg, 1, &fd_arg));
+    kassert(fetch_arg(arg, 2, &stat_arg));
+    
+    // convert arguments to their proper types
+    int fd = (int)fd_arg;
+    struct stat *stat = (struct stat*)stat_arg;
+
+    // make sure that fd refers to an open file
+    if (!validate_fd((int)fd)) {
+        return ERR_INVAL;
+    }
+
+    // get the file stored at index fd
+    struct proc *p = proc_current();
+    kassert(p);
+    struct file *file = p->fd_table[fd];
+
+    // throw an error if it is stdin or stdout
+    if (file == &stdin || file == &stdout) {
+        return ERR_INVAL;
+    }
+
+    // validate stat's address
+    if (!validate_ptr((void*)stat, sizeof(struct stat))) {
+        return ERR_FAULT;
+    }
+
+    // copy file's ftype to stat's ftype
+    stat->ftype = (int)file->f_inode->i_ftype;
+    stat->inode_num = (int)file->f_inode->i_inum;
+    stat->size = (size_t)file->f_inode->i_size;
+
+    return ERR_OK;
 }
 
 // void *sbrk(size_t increment);
