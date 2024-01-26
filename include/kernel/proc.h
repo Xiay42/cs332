@@ -19,7 +19,8 @@ struct proc {
     struct inode *cwd;                    // current working directory
     List threads;                         // list of threads belong to the process, right now just 1 per process
     Node proc_node;                       // used by ptable to keep track each process
-    struct file *fd_table[PROC_MAX_FILE]; //file descriptor table
+    struct file *fd_table[PROC_MAX_FILE]; // file descriptor table
+    struct proc *parent;                  // pointer to parent
 };
 
 struct proc *init_proc;

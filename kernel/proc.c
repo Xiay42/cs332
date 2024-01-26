@@ -114,6 +114,10 @@ proc_init(char* name)
         proc_free(p);
         return NULL;
     }
+
+    // initialize the parent pointer to NULL
+    p->parent = NULL;
+
     return p;
 }
 
@@ -168,10 +172,42 @@ error:
 struct proc*
 proc_fork()
 {
-    kassert(proc_current());  // caller of fork must be a process
+    // get parent process
+    struct proc *p = proc_current();
+    kassert(p);  // caller of fork must be a process
+
+    // init child process
+    struct proc *p_fork;
+    p_fork = proc_init("test");
+
+    // save a pointer to the parent process in the child 
+    p_fork->parent = p;
+
+    // copy address space and fd table from parent to child
+    as_copy_as(&(p->as), &(p_fork->as));
+    for (int i = 0; i < PROC_MAX_FILE; i++) {
+        p_fork->fd_table[i] = p->fd_table[i];
+    }
+
+    // add child process to ptable
+    spinlock_acquire(&ptable_lock);
+    list_append(&ptable, &p_fork->proc_node);
+    spinlock_release(&ptable_lock);
     
-    /* your code here */
-    return NULL;
+    // create child's thread
+    struct thread *t_fork;
+    if ((t_fork = thread_create(p_fork->name, p_fork, DEFAULT_PRI)) == NULL) {
+        return NULL;
+    }
+
+    // set up trapframe for a new process
+    *t_fork->tf = *thread_current()->tf;
+    // set return value of the trapframe
+    tf_set_return(t_fork->tf, 0);
+    // start the thread
+    thread_start_context(t_fork, NULL, NULL);
+
+    return p_fork;
 }
 
 struct proc*
