@@ -214,13 +214,16 @@ sys_wait(void* arg)
 static sysret_t
 sys_exit(void* arg)
 {
-    // temp code for lab1 to terminate the kernel after one process exits
-    // remove for lab 2 
-    kprintf("shutting down\n");
-    shutdown();
-    kprintf("oops still running\n");
-    for(;;) {}
-    panic("syscall exit not implemented");
+    // fetch args
+    sysarg_t status_arg;
+    kassert(fetch_arg(arg, 1, &status_arg));
+    
+    // Convert arguments to their proper types
+    int status = (int)status_arg;
+    
+    proc_exit(status);
+    
+    panic("oops still running");
 }
 
 // int getpid(void);

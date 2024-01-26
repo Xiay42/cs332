@@ -187,6 +187,11 @@ proc_fork()
     as_copy_as(&(p->as), &(p_fork->as));
     for (int i = 0; i < PROC_MAX_FILE; i++) {
         p_fork->fd_table[i] = p->fd_table[i];
+        
+        // reopen all files
+        if (p_fork->fd_table[i] != NULL) {
+            fs_reopen_file(p_fork->fd_table[i]);
+        }
     }
 
     // add child process to ptable
@@ -261,7 +266,23 @@ proc_exit(int status)
     // release process's cwd
     fs_release_inode(p->cwd);
  
-    /* your code here */
+    spinlock_acquire(&ptable_lock);
+    for (Node *n = list_begin(&ptable); n != list_end(&ptable); n = list_next(n)) {
+        struct proc *p = list_entry(n, struct proc, proc_node);
+
+        if (p == proc_current()) {
+            list_remove(n);
+            // close all files in fd table that arent null
+            for (int i = 0; i < PROC_MAX_FILE; i++) {
+                if (p->fd_table[i] != NULL) {
+                    fs_close_file(p->fd_table[i]);
+                }
+            }
+            proc_free(p);
+            break;
+        }
+    }
+    spinlock_release(&ptable_lock);
 
     thread_exit(status);
 }
