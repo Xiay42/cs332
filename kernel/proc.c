@@ -84,6 +84,9 @@ proc_init(char* name)
         return NULL;
     }
 
+    // initialize child_pid
+    p->child_pid = NULL;
+
     if (as_init(&p->as) != ERR_OK) {
         proc_free(p);
         return NULL;
@@ -117,6 +120,10 @@ proc_init(char* name)
 
     // initialize the parent pointer to NULL
     p->parent = NULL;
+
+    // struct condvar *cv = ;
+    // condvar_init(p->cv);
+    //  = cv;
 
     return p;
 }
@@ -245,7 +252,29 @@ proc_detach_thread(struct thread *t)
 int
 proc_wait(pid_t pid, int* status)
 {
-    /* your code here */
+    struct proc *p = proc_current();
+    kassert(p);
+
+    struct spinlock cv_lock = p->cv->cv_lock;
+
+    spinlock_acquire(&cv_lock);
+
+    if (pid == ANY_CHILD) {
+        p->child_pid = -1;
+        while (p->child_pid == -1) {
+            condvar_wait(p->cv, &cv_lock);
+        }
+
+    } else {
+        while (pid != p->child_pid) {
+            condvar_wait(p->cv, &cv_lock);
+        }
+    }
+
+    spinlock_release(&cv_lock);
+
+    *status = 0;
+
     return pid;
 }
 
@@ -267,21 +296,16 @@ proc_exit(int status)
     fs_release_inode(p->cwd);
  
     spinlock_acquire(&ptable_lock);
-    for (Node *n = list_begin(&ptable); n != list_end(&ptable); n = list_next(n)) {
-        struct proc *p = list_entry(n, struct proc, proc_node);
-
-        if (p == proc_current()) {
-            list_remove(n);
-            // close all files in fd table that arent null
-            for (int i = 0; i < PROC_MAX_FILE; i++) {
-                if (p->fd_table[i] != NULL) {
-                    fs_close_file(p->fd_table[i]);
-                }
-            }
-            proc_free(p);
-            break;
+            
+    list_remove(&p->proc_node);
+    // close all files in fd table that arent null
+    for (int i = 0; i < PROC_MAX_FILE; i++) {
+        if (p->fd_table[i] != NULL) {
+            fs_close_file(p->fd_table[i]);
         }
     }
+    proc_free(p);
+    
     spinlock_release(&ptable_lock);
 
     thread_exit(status);

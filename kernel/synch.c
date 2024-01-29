@@ -173,6 +173,7 @@ condvar_init(struct condvar* cv)
 {
     kassert(cv);
     list_init(&cv->waiters);
+    spinlock_init(&cv->cv_lock);
 }
 
 void

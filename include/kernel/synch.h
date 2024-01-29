@@ -17,6 +17,7 @@ struct spinlock {
 /* Condition variable */
 struct condvar {
     List waiters;
+    struct spinlock cv_lock;
 };
 
 /* Sleeplock */
