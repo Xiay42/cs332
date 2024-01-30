@@ -215,6 +215,16 @@ sys_wait(void* arg)
     int pid = (int)pid_arg;
     int *wstatus = (int *)wstatus_arg;
 
+    if (pid < -1) {
+        return ERR_CHILD;
+    }
+
+    if (wstatus != NULL) {
+        if (!validate_ptr(wstatus, sizeof(int))) {
+            return ERR_FAULT;
+        }
+    }    
+
     int return_pid = proc_wait(pid, wstatus);
     
     return return_pid;
