@@ -14,7 +14,7 @@
 
 struct proc {
     pid_t pid;
-    pid_t child_pid;
+    pid_t child_pid; // change this to an array of pids
     char name[PROC_NAME_LEN];
     struct addrspace as;
     struct inode *cwd;                    // current working directory
@@ -22,7 +22,8 @@ struct proc {
     Node proc_node;                       // used by ptable to keep track each process
     struct file *fd_table[PROC_MAX_FILE]; // file descriptor table
     struct proc *parent;                  // pointer to parent
-    struct condvar *cv;                   // conditional variable
+    struct condvar cv;                    // conditional variable
+    struct spinlock cv_lock;              // conditional variable lock
 };
 
 struct proc *init_proc;

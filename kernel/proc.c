@@ -104,8 +104,7 @@ proc_init(char* name)
     p->fd_table[1] = &stdout;
 
     // initialize the fd table to be NULL
-    for (size_t i = 2; i < PROC_MAX_FILE; i++)
-    {
+    for (size_t i = 2; i < PROC_MAX_FILE; i++) {
         p->fd_table[i] = NULL;
     }
 
@@ -121,9 +120,8 @@ proc_init(char* name)
     // initialize the parent pointer to NULL
     p->parent = NULL;
 
-    // struct condvar *cv = ;
-    // condvar_init(p->cv);
-    //  = cv;
+    spinlock_init(&p->cv_lock);
+    condvar_init(&p->cv);
 
     return p;
 }
@@ -140,6 +138,13 @@ proc_spawn(char* name, char** argv, struct proc **p)
     if ((proc = proc_init(name)) == NULL) {
         return ERR_NOMEM;
     }
+
+    // save a pointer to the parent process in the child
+    if (p != &init_proc) {
+        proc->parent = proc_current();
+    }
+    
+
     // load binary of the process
     if ((err = proc_load(proc, name, &entry_point)) != ERR_OK) {
         goto error;
@@ -184,8 +189,12 @@ proc_fork()
     kassert(p);  // caller of fork must be a process
 
     // init child process
+    // kprintf("hello\n");
     struct proc *p_fork;
     p_fork = proc_init("test");
+
+    // kprintf("hello\n");
+
 
     // save a pointer to the parent process in the child 
     p_fork->parent = p;
@@ -252,30 +261,41 @@ proc_detach_thread(struct thread *t)
 int
 proc_wait(pid_t pid, int* status)
 {
+    // kprintf("wait\n");
     struct proc *p = proc_current();
     kassert(p);
 
-    struct spinlock cv_lock = p->cv->cv_lock;
+    struct spinlock cv_lock = p->cv_lock;
+    // kprintf("wait2\n");
 
     spinlock_acquire(&cv_lock);
+    // kprintf("wait3\n");
 
     if (pid == ANY_CHILD) {
         p->child_pid = -1;
         while (p->child_pid == -1) {
-            condvar_wait(p->cv, &cv_lock);
+            condvar_wait(&p->cv, &cv_lock);
+            // kprintf("wait4\n");
         }
 
     } else {
         while (pid != p->child_pid) {
-            condvar_wait(p->cv, &cv_lock);
+            condvar_wait(&p->cv, &cv_lock);
+            // kprintf("wait5\n");
         }
     }
+    // kprintf("wait6\n");
 
     spinlock_release(&cv_lock);
+    // kprintf("wait7\n");
 
-    *status = 0;
+    if (status != NULL) {
+        *status = 0;
+    }
+    
+    // kprintf("wait8\n");
 
-    return pid;
+    return p->child_pid;
 }
 
 void
@@ -295,8 +315,6 @@ proc_exit(int status)
     // release process's cwd
     fs_release_inode(p->cwd);
  
-    spinlock_acquire(&ptable_lock);
-            
     list_remove(&p->proc_node);
     // close all files in fd table that arent null
     for (int i = 0; i < PROC_MAX_FILE; i++) {
@@ -304,9 +322,12 @@ proc_exit(int status)
             fs_close_file(p->fd_table[i]);
         }
     }
+    spinlock_acquire(&p->parent->cv_lock);
+    p->parent->child_pid = p->pid;
+    condvar_signal(&p->parent->cv);
+    spinlock_release(&p->parent->cv_lock);
+
     proc_free(p);
-    
-    spinlock_release(&ptable_lock);
 
     thread_exit(status);
 }

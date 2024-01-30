@@ -209,15 +209,15 @@ sys_wait(void* arg)
     sysarg_t pid_arg;
     sysarg_t wstatus_arg;
     kassert(fetch_arg(arg, 1, &pid_arg));
-    kassert(fetch_arg(arg, 1, &wstatus_arg));
+    kassert(fetch_arg(arg, 2, &wstatus_arg));
     
     // Convert arguments to their proper types
     int pid = (int)pid_arg;
     int *wstatus = (int *)wstatus_arg;
 
-    proc_wait(pid, wstatus);
+    int return_pid = proc_wait(pid, wstatus);
     
-    return 0;
+    return return_pid;
 }
 
 // void exit(int status);
@@ -231,6 +231,7 @@ sys_exit(void* arg)
     // Convert arguments to their proper types
     int status = (int)status_arg;
     
+    // kprintf("wee\n");
     proc_exit(status);
     
     panic("oops still running");
