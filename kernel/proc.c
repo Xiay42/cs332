@@ -270,12 +270,14 @@ proc_wait(pid_t pid, int* status)
     // kprintf("wait\n");
     struct proc *p = proc_current();
     kassert(p);
+    pid_t ret_pid = NULL;
 
     // kprintf("wait2\n");
 
     bool child_exists = False;
-    
     spinlock_acquire(&ptable_lock);
+
+    // make sure that the child with the desired pid exists, or any child if pid == ANY_CHILD
     for (Node *n = list_begin(&ptable); n != list_end(&ptable); n = list_next(n)) {
         struct proc *ptable_p = list_entry(n, struct proc, proc_node);
         if (ptable_p->parent == p) {
@@ -291,21 +293,23 @@ proc_wait(pid_t pid, int* status)
         }
     }
 
+    // if we did not find a child, ____________
     if (!child_exists) {
         for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
-            if ((pid == p->exited_children[i].pid || pid == ANY_CHILD) && !(p->exited_children[i].waited_on)) {
+            if ((pid == p->exited_children[i].pid || (pid == ANY_CHILD && p->exited_children[i].pid != NULL)) && !(p->exited_children[i].waited_on)) {
                 p->exited_children[i].waited_on = True;
                 if (status != NULL) {
                     *status = p->exited_children[i].status;
                 }
                 spinlock_release(&ptable_lock);
-                return pid;
+                return p->exited_children[i].pid;
             }
         }
         spinlock_release(&ptable_lock);
         return ERR_CHILD;
     }
     spinlock_release(&ptable_lock);
+
 
 
     spinlock_acquire(&p->cv_lock);
@@ -318,9 +322,10 @@ proc_wait(pid_t pid, int* status)
                 condvar_wait(&p->cv, &p->cv_lock);
             // }
             // kprintf("wait3.6\n");
+
             for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
                 if (p->exited_children[i].pid != NULL && !(p->exited_children[i].waited_on)) {
-                    pid = p->exited_children[i].pid;
+                    ret_pid = p->exited_children[i].pid;
                     p->exited_children[i].waited_on = True;
                     if (status != NULL) {
                         *status = p->exited_children[i].status;
@@ -348,6 +353,7 @@ proc_wait(pid_t pid, int* status)
                         return ERR_CHILD;
                     }
                     // kprintf("wait4.5\n");
+                    ret_pid = p->exited_children[i].pid;
                     child_found = True;
                     p->exited_children[i].waited_on = True;
                     if (status != NULL) {
@@ -367,7 +373,7 @@ proc_wait(pid_t pid, int* status)
     // kprintf("wait8\n");
 
     // *status = 0;
-    return pid;
+    return ret_pid;
 }
 
 void
@@ -406,11 +412,12 @@ proc_exit(int status)
                 if (p->parent->exited_children[i].pid == NULL) {
                     p->parent->exited_children[i].pid = p->pid;
                     p->parent->exited_children[i].status = status;
+                    // kprintf("cpid=%d\n", p->pid);
+                    // kprintf("cstatus=%d\n", status);
                     break;
                 }  
             }
         }
-
         condvar_signal(&p->parent->cv);
         spinlock_release(&p->parent->cv_lock);
     }
