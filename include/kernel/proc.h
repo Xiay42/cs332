@@ -11,7 +11,7 @@
 #define PROC_MAX_ARG 128
 #define PROC_NAME_LEN 32
 #define PROC_MAX_FILE 128
-#define PROC_MAX_CHILDREN 128
+#define PROC_MAX_CHILDREN 1024
 
 struct exited_child {
     pid_t pid;

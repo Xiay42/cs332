@@ -317,12 +317,7 @@ proc_wait(pid_t pid, int* status)
 
     if (pid == ANY_CHILD) {
         while (!child_found) {
-            // while (p->child_pids[next_empty] == NULL) {
-                // kprintf("wait3.5\n");
-                condvar_wait(&p->cv, &p->cv_lock);
-            // }
-            // kprintf("wait3.6\n");
-
+            condvar_wait(&p->cv, &p->cv_lock);
             for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
                 if (p->exited_children[i].pid != NULL && !(p->exited_children[i].waited_on)) {
                     ret_pid = p->exited_children[i].pid;
