@@ -395,33 +395,32 @@ proc_exit(int status)
         }
     }
 
-    if (p->parent == NULL)
-    {
-        /* code */
-    }
-    
-
-    spinlock_acquire(&p->parent->cv_lock);
-    // update exited_children array of parent
-    for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
-        // if (p->parent->exited_children[i].pid == p->pid) {
-        //     p->parent->exited_children[i].status = status;
-        //     break;
-        // } else {
-            if (p->parent->exited_children[i].pid == NULL) {
-                p->parent->exited_children[i].pid = p->pid;
+    if (p->parent != NULL) {
+        spinlock_acquire(&p->parent->cv_lock);
+        // update exited_children array of parent
+        for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
+            if (p->parent->exited_children[i].pid == p->pid) {
                 p->parent->exited_children[i].status = status;
                 break;
-            }  
-        // }
+            } else {
+                if (p->parent->exited_children[i].pid == NULL) {
+                    p->parent->exited_children[i].pid = p->pid;
+                    p->parent->exited_children[i].status = status;
+                    break;
+                }  
+            }
+        }
+
+        condvar_signal(&p->parent->cv);
+        spinlock_release(&p->parent->cv_lock);
     }
 
-
-
-    condvar_signal(&p->parent->cv);
-    spinlock_release(&p->parent->cv_lock);
-
-
+    for (Node *n = list_begin(&ptable); n != list_end(&ptable); n = list_next(n)) {
+        struct proc *ptable_p = list_entry(n, struct proc, proc_node);
+        if (ptable_p->parent == p) {
+            ptable_p->parent = NULL;
+        }
+    }
 
     proc_free(p);
 
