@@ -11,10 +11,18 @@
 #define PROC_MAX_ARG 128
 #define PROC_NAME_LEN 32
 #define PROC_MAX_FILE 128
+#define PROC_MAX_CHILDREN 128
+
+struct exited_child {
+    pid_t pid;
+    int status;
+    bool waited_on;
+};
+
 
 struct proc {
     pid_t pid;
-    pid_t child_pid; // change this to an array of pids
+    struct exited_child exited_children[PROC_MAX_CHILDREN];  // array of children pids who have exited
     char name[PROC_NAME_LEN];
     struct addrspace as;
     struct inode *cwd;                    // current working directory

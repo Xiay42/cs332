@@ -84,8 +84,12 @@ proc_init(char* name)
         return NULL;
     }
 
-    // initialize child_pid
-    p->child_pid = NULL;
+    // initialize the child_pids table to be NULL
+    for (size_t i = 0; i < PROC_MAX_CHILDREN; i++) {
+        p->exited_children[i].pid = NULL;
+        p->exited_children[i].status = NULL;
+        p->exited_children[i].waited_on = False;
+    }
 
     if (as_init(&p->as) != ERR_OK) {
         proc_free(p);
@@ -228,6 +232,8 @@ proc_fork()
     // start the thread
     thread_start_context(t_fork, NULL, NULL);
 
+    
+
     return p_fork;
 }
 
@@ -268,20 +274,86 @@ proc_wait(pid_t pid, int* status)
     struct spinlock cv_lock = p->cv_lock;
     // kprintf("wait2\n");
 
+    bool child_exists = False;
+    
+    spinlock_acquire(&ptable_lock);
+    for (Node *n = list_begin(&ptable); n != list_end(&ptable); n = list_next(n)) {
+        struct proc *ptable_p = list_entry(n, struct proc, proc_node);
+        if (ptable_p->parent == p) {
+            if (pid == ANY_CHILD) {
+                child_exists = True;
+                break;
+            } else {
+                if (ptable_p->pid == pid) {
+                    child_exists = True;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!child_exists && pid > -1) {
+        for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
+            if (pid == p->exited_children[i].pid && !(p->exited_children[i].waited_on)) {
+                p->exited_children[i].waited_on = True;
+                if (status != NULL) {
+                    *status = p->exited_children[i].status;
+                }
+                spinlock_release(&ptable_lock);
+                return pid;
+            }
+        }
+        spinlock_release(&ptable_lock);
+        return ERR_CHILD;
+    }
+    spinlock_release(&ptable_lock);
+
     spinlock_acquire(&cv_lock);
-    // kprintf("wait3\n");
 
     if (pid == ANY_CHILD) {
-        p->child_pid = -1;
-        while (p->child_pid == -1) {
+        // while (p->child_pids[next_empty] == NULL) {
+            // kprintf("wait3.5\n");
             condvar_wait(&p->cv, &cv_lock);
-            // kprintf("wait4\n");
+        // }
+        // kprintf("wait3.6\n");
+        for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
+            if (p->exited_children[i].pid == NULL) {
+                pid = p->exited_children[i].pid;
+                p->exited_children[i].waited_on = True;
+                if (status != NULL) {
+                    *status = p->exited_children[i].status;
+                }
+                break;
+            }
         }
-
     } else {
-        while (pid != p->child_pid) {
+
+        // check for the desired pid in the list of child pids
+        bool child_found = False;
+        while (!child_found) {
+            // kprintf("wait4\n");
+
             condvar_wait(&p->cv, &cv_lock);
-            // kprintf("wait5\n");
+            
+            for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
+                // for (int j = 0; j < 10; j++) {
+                //     kprintf("%d ", p->exited_children[j].pid);
+                // }
+                // kprintf("\n");
+                if (p->exited_children[i].pid == pid) {
+                    // if the child we are trying to wait on has already exited, return ERR_CHILD 
+                    if (p->exited_children[i].waited_on == True) {
+                        return ERR_CHILD;
+                    }
+                    // kprintf("wait4.5\n");
+                    child_found = True;
+                    p->exited_children[i].waited_on = True;
+                    if (status != NULL) {
+                        *status = p->exited_children[i].status;
+                    }
+                    break;
+                }
+            }
         }
     }
     // kprintf("wait6\n");
@@ -289,13 +361,11 @@ proc_wait(pid_t pid, int* status)
     spinlock_release(&cv_lock);
     // kprintf("wait7\n");
 
-    if (status != NULL) {
-        *status = 0;
-    }
     
     // kprintf("wait8\n");
 
-    return p->child_pid;
+    // *status = 0;
+    return pid;
 }
 
 void
@@ -322,8 +392,21 @@ proc_exit(int status)
             fs_close_file(p->fd_table[i]);
         }
     }
+
     spinlock_acquire(&p->parent->cv_lock);
-    p->parent->child_pid = p->pid;
+    // update exited_children array of parent
+    for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
+        // if (p->parent->exited_children[i].pid == p->pid) {
+        //     p->parent->exited_children[i].status = status;
+        //     break;
+        // } else {
+            if (p->parent->exited_children[i].pid == NULL) {
+                p->parent->exited_children[i].pid = p->pid;
+                p->parent->exited_children[i].status = status;
+                break;
+            }  
+        // }
+    }
     condvar_signal(&p->parent->cv);
     spinlock_release(&p->parent->cv_lock);
 
