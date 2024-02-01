@@ -17,15 +17,18 @@ main()
         for (int i = 0; i < 100000000; i++)
         {
         }
+        printf("exit child\n");
         exit(getpid());
         error("fork-wait2: exit failed to destroy process %d", getpid());
     }
     else {
         printf("Parent! (pid=%d, child=%d)\n", getpid(), pid);
+        printf("parent waiting\n");
         if (wait(pid, NULL) != pid) // wait on this pid
         {
             error("fork-wait2: wait failed to return pid");
         }
+        printf("parent done waiting\n");
     }
 
     pass("fork-wait2");

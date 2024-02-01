@@ -124,6 +124,7 @@ proc_init(char* name)
     // initialize the parent pointer to NULL
     p->parent = NULL;
 
+    // initialize the conditional variables and conditional variable locks
     spinlock_init(&p->cv_lock);
     condvar_init(&p->cv);
 
@@ -147,19 +148,18 @@ proc_spawn(char* name, char** argv, struct proc **p)
     if (p != &init_proc) {
         proc->parent = proc_current();
     }
-    
 
     // load binary of the process
     if ((err = proc_load(proc, name, &entry_point)) != ERR_OK) {
         goto error;
     }
 
-
     // set up stack and allocate its memregion 
     if ((err = stack_setup(proc, argv, &stackptr)) != ERR_OK) {
         goto error;
     }
 
+    // create a thread for the process
     if ((t = thread_create(proc->name, proc, DEFAULT_PRI)) == NULL) {
         err = ERR_NOMEM;
         goto error;
@@ -193,12 +193,8 @@ proc_fork()
     kassert(p);  // caller of fork must be a process
 
     // init child process
-    // kprintf("hello\n");
     struct proc *p_fork;
     p_fork = proc_init("test");
-
-    // kprintf("hello\n");
-
 
     // save a pointer to the parent process in the child 
     p_fork->parent = p;
@@ -231,8 +227,6 @@ proc_fork()
     tf_set_return(t_fork->tf, 0);
     // start the thread
     thread_start_context(t_fork, NULL, NULL);
-
-    
 
     return p_fork;
 }
@@ -267,17 +261,18 @@ proc_detach_thread(struct thread *t)
 int
 proc_wait(pid_t pid, int* status)
 {
-    // kprintf("wait\n");
+    // get the parent's procedure 
     struct proc *p = proc_current();
     kassert(p);
+
+    // set up variables
     pid_t ret_pid = NULL;
-
-    // kprintf("wait2\n");
-
     bool child_exists = False;
+
+    // aquire ptable lock
     spinlock_acquire(&ptable_lock);
 
-    // make sure that the child with the desired pid exists, or any child if pid == ANY_CHILD
+    // make sure that the child with the desired pid exists, or any child exists if pid == ANY_CHILD
     for (Node *n = list_begin(&ptable); n != list_end(&ptable); n = list_next(n)) {
         struct proc *ptable_p = list_entry(n, struct proc, proc_node);
         if (ptable_p->parent == p) {
@@ -293,14 +288,19 @@ proc_wait(pid_t pid, int* status)
         }
     }
 
-    // if we did not find a child, ____________
+    // if we did not find a child, check to see if a child with the desired pid exists.
+    // if we are looking for any child, check to see if there is a child not yet waited on.
     if (!child_exists) {
         for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
-            if ((pid == p->exited_children[i].pid || (pid == ANY_CHILD && p->exited_children[i].pid != NULL)) && !(p->exited_children[i].waited_on)) {
-                p->exited_children[i].waited_on = True;
+            
+            if ((pid == p->exited_children[i].pid || 
+                    (pid == ANY_CHILD && p->exited_children[i].pid != NULL)) &&
+                !(p->exited_children[i].waited_on)) {
+
                 if (status != NULL) {
                     *status = p->exited_children[i].status;
                 }
+                p->exited_children[i].waited_on = True;
                 spinlock_release(&ptable_lock);
                 return p->exited_children[i].pid;
             }
@@ -308,66 +308,67 @@ proc_wait(pid_t pid, int* status)
         spinlock_release(&ptable_lock);
         return ERR_CHILD;
     }
+    // release ptable lock
     spinlock_release(&ptable_lock);
 
 
-
+    // acquire cond var lock
     spinlock_acquire(&p->cv_lock);
+    
+    // init child_found variable
     bool child_found = False;
 
+    // if we are waiting for any child, sleep until there is a child that we have not waited on
     if (pid == ANY_CHILD) {
         while (!child_found) {
+
+            // wait until an exiting child wakes the parent
             condvar_wait(&p->cv, &p->cv_lock);
+            
             for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
+                
                 if (p->exited_children[i].pid != NULL && !(p->exited_children[i].waited_on)) {
+                    // save the child's pid, status, and update its waited on status
                     ret_pid = p->exited_children[i].pid;
-                    p->exited_children[i].waited_on = True;
                     if (status != NULL) {
                         *status = p->exited_children[i].status;
                     }
+                    p->exited_children[i].waited_on = True;
                     child_found = True;
                     break;
                 }
             }
         }
+    
+    // if we are waiting for a specific pid, sleep until that pid has exited
     } else {
-        // check for the desired pid in the list of child pids
         while (!child_found) {
-            // kprintf("wait4\n");
 
+            // wait until an exiting child wakes the parent
             condvar_wait(&p->cv, &p->cv_lock);
             
             for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
-                // for (int j = 0; j < 10; j++) {
-                //     kprintf("%d ", p->exited_children[j].pid);
-                // }
-                // kprintf("\n");
                 if (p->exited_children[i].pid == pid) {
                     // if the child we are trying to wait on has already exited, return ERR_CHILD 
                     if (p->exited_children[i].waited_on == True) {
                         return ERR_CHILD;
                     }
-                    // kprintf("wait4.5\n");
+                    // save the child's pid, status, and update its waited on status
                     ret_pid = p->exited_children[i].pid;
-                    child_found = True;
-                    p->exited_children[i].waited_on = True;
                     if (status != NULL) {
                         *status = p->exited_children[i].status;
                     }
+                    p->exited_children[i].waited_on = True;
+                    child_found = True;
                     break;
                 }
             }
         }
     }
-    // kprintf("wait6\n");
 
+    // release the cond var lock
     spinlock_release(&p->cv_lock);
-    // kprintf("wait7\n");
 
-    
-    // kprintf("wait8\n");
-
-    // *status = 0;
     return ret_pid;
 }
 
@@ -388,7 +389,9 @@ proc_exit(int status)
     // release process's cwd
     fs_release_inode(p->cwd);
  
+    // remove process from the ptable
     list_remove(&p->proc_node);
+
     // close all files in fd table that arent null
     for (int i = 0; i < PROC_MAX_FILE; i++) {
         if (p->fd_table[i] != NULL) {
@@ -396,27 +399,23 @@ proc_exit(int status)
         }
     }
 
+    // if the child's parent still exists
     if (p->parent != NULL) {
         spinlock_acquire(&p->parent->cv_lock);
         // update exited_children array of parent
         for (int i = 0; i < PROC_MAX_CHILDREN; i++) {
-            if (p->parent->exited_children[i].pid == p->pid) {
+            if (p->parent->exited_children[i].pid == NULL) {
+                p->parent->exited_children[i].pid = p->pid;
                 p->parent->exited_children[i].status = status;
                 break;
-            } else {
-                if (p->parent->exited_children[i].pid == NULL) {
-                    p->parent->exited_children[i].pid = p->pid;
-                    p->parent->exited_children[i].status = status;
-                    // kprintf("cpid=%d\n", p->pid);
-                    // kprintf("cstatus=%d\n", status);
-                    break;
-                }  
             }
         }
-        condvar_signal(&p->parent->cv);
+        // wake up waiting parent, if there are any
+        condvar_signal(&p->parent->cv); 
         spinlock_release(&p->parent->cv_lock);
     }
 
+    // letting all the children know when a parent exited
     for (Node *n = list_begin(&ptable); n != list_end(&ptable); n = list_next(n)) {
         struct proc *ptable_p = list_entry(n, struct proc, proc_node);
         if (ptable_p->parent == p) {
@@ -424,8 +423,9 @@ proc_exit(int status)
         }
     }
 
+    // clear caches
     proc_free(p);
-
+    // detach threads
     thread_exit(status);
 }
 

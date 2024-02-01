@@ -211,14 +211,16 @@ sys_wait(void* arg)
     kassert(fetch_arg(arg, 1, &pid_arg));
     kassert(fetch_arg(arg, 2, &wstatus_arg));
     
-    // Convert arguments to their proper types
+    // convert arguments to their proper types
     int pid = (int)pid_arg;
     int *wstatus = (int *)wstatus_arg;
 
+    // make sure pid is valid
     if (pid < -1) {
         return ERR_CHILD;
     }
 
+    // validate wstatus
     if (wstatus != NULL) {
         if (!validate_ptr(wstatus, sizeof(int))) {
             return ERR_FAULT;
@@ -241,7 +243,6 @@ sys_exit(void* arg)
     // Convert arguments to their proper types
     int status = (int)status_arg;
     
-    // kprintf("wee\n");
     proc_exit(status);
     
     panic("oops still running");
