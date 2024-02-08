@@ -616,6 +616,29 @@ sys_dup(void *arg)
 static sysret_t
 sys_pipe(void* arg)
 {
+    sysarg_t fds_arg;
+
+    kassert(fetch_arg(arg, 1, &fds_arg));
+    
+    // Convert argument to its proper type
+    int *fds = (int *)fds_arg;
+    
+    // validate fds' address
+    if (!validate_ptr((void*)fds, sizeof(int) * 2)) {
+        return ERR_FAULT;
+    }
+
+    // struct pipe pipe = pipe_alloc();
+    struct pipe *pipe = NULL;
+
+    // if we don't have a pipe object, return ERR_NOMEM
+    if (pipe == NULL) {
+        return ERR_NOMEM;
+    } 
+
+    // store the two file-descriptor-table indices associated with the struct pipe object
+    // returned from pipe_alloc in the provided fds array, and return ERR_OK.
+    
     panic("syscall pipe not implemented");
 }
 
