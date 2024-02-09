@@ -5,28 +5,18 @@
 #include <kernel/list.h>
 #include <kernel/radix_tree.h>
 #include <kernel/synch.h>
+#include <kernel/fs.h>
+#include <kernel/bbq.h>
 
-#define BUFFER_SIZE 512
+#ifndef __PIPE_H__
+#define __PIPE_H__
 
-struct BBQ {
-    struct condvar cv_read;
-    struct condvar cv_write;
-    int front;
-    int next_empty;
-    char data[BUFFER_SIZE];
-};
-
-struct pipe {
-    struct BBQ *buffer; 
+typedef struct {
+    BBQ *q;
     struct file *read;
     struct file *write;
-};
+}pipe;
 
-struct pipe *pipe_alloc();
+pipe *pipe_alloc();
 
-struct BBQ *BBQ_alloc();
-
-// static ssize_t pipe_read(struct file *file, void *buf, size_t count, offset_t *ofs);
-// static ssize_t pipe_write(struct file *file, const void *buf, size_t count, offset_t *ofs);
-// static void pipe_close(struct file *p);
-
+#endif // __PIPE_H__

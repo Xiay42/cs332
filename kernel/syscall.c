@@ -8,6 +8,8 @@
 #include <lib/stddef.h>
 #include <lib/string.h>
 #include <arch/asm.h>
+#include <kernel/pipe.h>
+
 
 // syscall handlers
 static sysret_t sys_fork(void* arg);
@@ -628,18 +630,36 @@ sys_pipe(void* arg)
         return ERR_FAULT;
     }
 
-    // struct pipe pipe = pipe_alloc();
-    struct pipe *pipe = NULL;
+    pipe *pipe = pipe_alloc();
 
     // if we don't have a pipe object, return ERR_NOMEM
     if (pipe == NULL) {
         return ERR_NOMEM;
-    } 
+    }
 
     // store the two file-descriptor-table indices associated with the struct pipe object
     // returned from pipe_alloc in the provided fds array, and return ERR_OK.
+    fds[0] = alloc_fd(pipe->read);
+    if (fds[0] == ERR_NOMEM) {
+        return ERR_NOMEM;
+    }
     
-    panic("syscall pipe not implemented");
+    fds[1] = alloc_fd(pipe->write);
+    if (fds[1] == ERR_NOMEM) {
+
+        // get the file stored at index fd
+        struct proc *p = proc_current();
+        kassert(p);
+        struct file *file = p->fd_table[fds[0]];
+
+        // close the file and remove it from fd_table
+        fs_close_file(file);
+        p->fd_table[fds[0]] = NULL;
+
+        return ERR_NOMEM;
+    }
+
+    return ERR_OK;
 }
 
 // void sys_info(struct sys_info *info);

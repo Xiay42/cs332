@@ -668,6 +668,7 @@ fs_alloc_file(void)
         memset(file, 0, sizeof(struct file));
         sleeplock_init(&file->f_lock);
         file->f_ref = 1;
+        file->info = NULL;
     }
     return file;
 }
