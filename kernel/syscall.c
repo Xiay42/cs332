@@ -618,8 +618,8 @@ sys_dup(void *arg)
 static sysret_t
 sys_pipe(void* arg)
 {
+    // fetch arg
     sysarg_t fds_arg;
-
     kassert(fetch_arg(arg, 1, &fds_arg));
     
     // Convert argument to its proper type
@@ -630,21 +630,25 @@ sys_pipe(void* arg)
         return ERR_FAULT;
     }
 
+    // allocate the pipe, making sure it worked
     pipe *pipe = pipe_alloc();
-
-    // if we don't have a pipe object, return ERR_NOMEM
     if (pipe == NULL) {
         return ERR_NOMEM;
     }
 
     // store the two file-descriptor-table indices associated with the struct pipe object
     // returned from pipe_alloc in the provided fds array, and return ERR_OK.
+
+    // get an fd for the read end, making sure it worked
     fds[0] = alloc_fd(pipe->read);
     if (fds[0] == ERR_NOMEM) {
         return ERR_NOMEM;
     }
     
+    // get an fd for the write end
     fds[1] = alloc_fd(pipe->write);
+
+    // if the second fd has an error, close the first one
     if (fds[1] == ERR_NOMEM) {
 
         // get the file stored at index fd
