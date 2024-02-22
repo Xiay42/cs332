@@ -52,7 +52,7 @@ eval(char *cmdline)
         // shell waits for the foreground job to terminate
         if ((pid = spawn(cmdline)) > 0) {
             wait(pid, &status);
-            printf("foregroud job %s exited with status %d\n", cmdline, status);
+            printf("foreground job %s exited with status %d\n", cmdline, status);
         }
     }
     return;
