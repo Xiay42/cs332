@@ -4,6 +4,7 @@
 #include <lib/errcode.h>
 #include <kernel/vpmap.h>
 #include <lib/string.h>
+#include <arch/mmu.h>
 
 
 size_t user_pgfault = 0;
@@ -17,6 +18,9 @@ handle_page_fault(vaddr_t fault_addr, int present, int write, int user) {
     // turn on interrupt now that we have the fault address 
     intr_set_level(INTR_ON);
 
+    if (fault_addr > USTACK_UPPERBOUND - pg_size || fault_addr < USTACK_LOWERBOUND) {
+        proc_exit(-1);
+    }
 
     paddr_t paddr;
 
