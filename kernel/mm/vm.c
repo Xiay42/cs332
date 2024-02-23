@@ -255,6 +255,14 @@ found:
 err_t
 memregion_extend(struct memregion *region, ssize_t size, vaddr_t *old_bound)
 {
+    // check so that the we are not making the heap negative in size
+    if ((region->end + size) < region->start){
+        return ERR_VM_INVALID;
+    }
+    // set old bound
+    *old_bound = region->end;
+    // grow the heap by size
+    region->end += size;
     return ERR_OK;
 }
 

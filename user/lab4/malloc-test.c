@@ -5,6 +5,7 @@
 int
 main()
 {
+    printf("start\n");
     void *m1, *m2;
     int i;
 
@@ -15,6 +16,7 @@ main()
         *(char **)m2 = m1;
         m1 = m2;
     }
+    printf("pass first");
 
     // go through and free allocated buffers
     while (m1) {
@@ -22,12 +24,14 @@ main()
         free(m1);
         m1 = m2;
     }
-    
+    printf("pass second");  
+
     // allocate more more buffers
     if ((m1 = malloc(1024 * 20)) == NULL) {
         error("failed to malloc");
     }
     free(m1);
+
 
     pass("malloc-test");
     exit(0);

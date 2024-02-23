@@ -570,8 +570,24 @@ sys_fstat(void *arg)
 // void *sbrk(size_t increment);
 static sysret_t
 sys_sbrk(void *arg)
-{
-    panic("syscall sbrk not implemented");
+{    
+    // Retrieve the increment argument
+    sysarg_t increment_arg;
+    kassert(fetch_arg(arg, 1, &increment_arg));
+    size_t increment = (size_t)increment_arg;
+
+    // Get the current process
+    struct proc *p = proc_current();
+    kassert(p);
+
+    vaddr_t old_bound = NULL;
+    // call memregion_extend to extend the heap by increment
+    if (memregion_extend(p->as.heap, increment, &old_bound) != ERR_OK) {
+        // Error if memregion_extend fails
+        return ERR_NOMEM;
+    }
+
+    return old_bound;
 }
 
 // void memifo();
